@@ -1,7 +1,7 @@
 #!/bin/bash
 
-# Configuration file path
-CONFIG_FILE="ssl.cnf"
+# Configuration embedded in the script
+CONFIG_FILE="${TMP_DIR}/ssl.cnf"
 
 # Set directories
 TMP_DIR="/tmp"
@@ -14,17 +14,41 @@ handle_error() {
     exit 1
 }
 
-# Check if the ssl.cnf configuration file exists
-if [ ! -f "${CONFIG_FILE}" ]; then
-    handle_error "Error: The ${CONFIG_FILE} file was not found!"
-fi
+# Generate ssl.cnf file dynamically
+generate_config() {
+    cat <<EOF > "${CONFIG_FILE}"
+[ req ]
+default_bits       = 4096
+default_md         = sha256
+default_keyfile    = ${DOMAIN}-encrypted.key
+distinguished_name = req_distinguished_name
+req_extensions     = v3_req
+prompt             = no
 
-# Extract the domain (CN) from the .cnf file
-DOMAIN=$(grep -E "^CN\s*=\s*" "${CONFIG_FILE}" | sed 's/.*=\s*//')
+[ req_distinguished_name ]
+C = ***
+ST = ***
+L = ***
+O = ***
+OU = ***
+CN = ${DOMAIN}
 
-# Verify if the DOMAIN was successfully extracted
+[ v3_req ]
+keyUsage = keyEncipherment, dataEncipherment
+extendedKeyUsage = serverAuth
+subjectAltName = @alt_names
+
+[ alt_names ]
+DNS.1 = ${DOMAIN}
+EOF
+}
+
+# Ask for domain name input
+read -p "Enter the domain name (CN): " DOMAIN
+
+# Validate domain name
 if [ -z "$DOMAIN" ]; then
-    handle_error "Error: Could not extract the domain (CN) from ${CONFIG_FILE}!"
+    handle_error "Error: Domain name (CN) cannot be empty!"
 fi
 
 # Set file paths based on the extracted domain
@@ -33,6 +57,9 @@ KEY_FILE="${TMP_DIR}/${DOMAIN}.key"
 PASS_FILE="${TMP_DIR}/${DOMAIN}.pass"
 CSR_FILE="${TMP_DIR}/${DOMAIN}.csr"
 CRT_FILE="${DOMAIN}.crt"  # Empty .crt file in the current directory
+
+# Generate the ssl.cnf file
+generate_config
 
 # Confirm action with user
 read -p "Proceed with generating private keys and CSR for domain ${DOMAIN}? (y/n): " response
@@ -50,7 +77,7 @@ openssl genrsa -aes128 -passout pass:${PASSPHRASE} -out "${KEY_FILE_ENCRYPTED}" 
 # Decrypt the private key (remove passphrase) and save it in /tmp
 openssl rsa -in "${KEY_FILE_ENCRYPTED}" -out "${KEY_FILE}" -passin pass:${PASSPHRASE} || handle_error "Error decrypting private key."
 
-# Generate a certificate signing request (CSR) using the decrypted key and the configuration file
+# Generate a certificate signing request (CSR) using the decrypted key and the generated configuration file
 openssl req -sha256 -key "${KEY_FILE}" -new -out "${CSR_FILE}" -config "${CONFIG_FILE}" || handle_error "Error generating CSR."
 
 # Create an empty .crt file in the current directory
