@@ -1,0 +1,53 @@
+#!/bin/bash
+
+# Configuration file path
+CONFIG_FILE="ssl.cnf"
+
+# Check if the ssl.cnf configuration file exists
+if [ ! -f "${CONFIG_FILE}" ]; then
+    echo "Error: The ${CONFIG_FILE} file was not found!"
+    exit 1
+fi
+
+# Extract the domain (CN) from the .cnf file
+DOMAIN=$(grep -E "^CN\s*=\s*" "${CONFIG_FILE}" | sed 's/.*=\s*//')
+
+# Verify if the DOMAIN was successfully extracted
+if [ -z "$DOMAIN" ]; then
+    echo "Error: Could not extract the domain (CN) from ${CONFIG_FILE}!"
+    exit 1
+fi
+
+# Set file paths based on the extracted domain
+TMP_DIR="/tmp"
+KEY_FILE_ENCRYPTED="${TMP_DIR}/${DOMAIN}-encrypted.key"
+KEY_FILE="${TMP_DIR}/${DOMAIN}.key"
+PASS_FILE="${TMP_DIR}/${DOMAIN}.pass"
+CSR_FILE="${TMP_DIR}/${DOMAIN}.csr"
+CRT_FILE="${DOMAIN}.crt"  # Empty .crt file in the current directory
+
+# Generate a secure passphrase and save it to a file in /tmp
+PASSPHRASE=$(openssl rand -base64 32)
+echo "Passphrase for ${DOMAIN}: ${PASSPHRASE}" > "${PASS_FILE}"
+
+# Generate an AES-128 encrypted private key (4096 bits) and save it in /tmp
+openssl genrsa -aes128 -passout pass:${PASSPHRASE} -out "${KEY_FILE_ENCRYPTED}" 4                                                                                                                                 096
+
+# Decrypt the private key (remove passphrase) and save it in /tmp
+openssl rsa -in "${KEY_FILE_ENCRYPTED}" -out "${KEY_FILE}" -passin pass:${PASSPHR                                                                                                                                 ASE}
+
+# Generate a certificate signing request (CSR) using the decrypted key and the co                                                                                                                                 nfiguration file
+openssl req -sha256 -key "${KEY_FILE}" -new -out "${CSR_FILE}" -config "${CONFIG_                                                                                                                                 FILE}"
+
+# Create an empty .crt file in the current directory
+touch "${CRT_FILE}"
+
+# Output generated files
+echo "Generated encrypted private key: ${KEY_FILE_ENCRYPTED}"
+echo "Decrypted private key without passphrase: ${KEY_FILE}"
+echo "Generated certificate signing request (CSR): ${CSR_FILE}"
+echo "Empty certificate file created: ${CRT_FILE}"
+
+# Show the content of the CSR file
+echo "Content of the CSR file (${CSR_FILE}):"
+cat "${CSR_FILE}"
