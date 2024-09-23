@@ -1,2 +1,2 @@
 
-curl -sSL https://example.com/manage_ssl.sh | bash
+curl -sSL https://raw.githubusercontent.com/msickl/certs/refs/heads/main/manage_ssl.sh | bash
